@@ -1,0 +1,267 @@
+import 'dart:math';
+
+import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:rive/rive.dart';
+
+import 'package:tomonylist/layout/home/components/btm_nav_item.dart';
+import 'package:tomonylist/layout/home/components/menu_btn.dart';
+import 'package:tomonylist/layout/home/components/side_bar.dart';
+import 'package:tomonylist/model/menu.dart';
+import 'package:tomonylist/modules/cubit/main_cubit.dart';
+import 'package:tomonylist/shared/config/constants.dart';
+import 'package:tomonylist/shared/config/rive_utils.dart';
+
+class EntryPoint extends StatefulWidget {
+  const EntryPoint({super.key});
+
+  @override
+  State<EntryPoint> createState() => _EntryPointState();
+}
+
+class _EntryPointState extends State<EntryPoint>
+    with SingleTickerProviderStateMixin {
+  bool isSideBarOpen = false;
+
+  Menu selectedBottonNav = bottomNavItems.first;
+  Menu selectedSideMenu = sidebarMenus.first;
+  late SMIBool isMenuOpenInput;
+
+  void updateSelectedBtmNav(Menu menu) {
+    if (selectedBottonNav != menu) {
+      setState(() {
+        selectedBottonNav = menu;
+      });
+    }
+  }
+
+  late AnimationController _animationController;
+  late Animation<double> scalAnimation;
+  late Animation<double> animation;
+
+  // Add a PageController to manage page navigation
+  final PageController _pageController = PageController();
+  int selectedIndex = 0; // To keep track of the current selected page
+
+  @override
+  void initState() {
+    _animationController = AnimationController(
+        vsync: this, duration: const Duration(milliseconds: 200))
+      ..addListener(
+        () {
+          setState(() {});
+        },
+      );
+    scalAnimation = Tween<double>(begin: 1, end: 0.8).animate(CurvedAnimation(
+        parent: _animationController, curve: Curves.fastOutSlowIn));
+    animation = Tween<double>(begin: 0, end: 1).animate(CurvedAnimation(
+        parent: _animationController, curve: Curves.fastOutSlowIn));
+    super.initState();
+  }
+
+  @override
+  void dispose() {
+    _animationController.dispose();
+    _pageController.dispose(); // Dispose the PageController
+    super.dispose();
+  }
+
+  // Function to handle page switching
+  void _onNavItemTapped(int index) {
+    setState(() {
+      selectedIndex = index; // Update the selected index
+    });
+    _pageController.jumpToPage(index);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return BlocConsumer<MainCubit, MainState>(
+      listener: (context, state) {},
+      builder: (context, state) {
+        return Scaffold(
+          extendBody: true,
+          resizeToAvoidBottomInset: false,
+          backgroundColor: backgroundColor2,
+          body: Stack(
+            children: [
+              AnimatedPositioned(
+                width: 288,
+                height: MediaQuery.of(context).size.height,
+                duration: const Duration(milliseconds: 200),
+                curve: Curves.fastOutSlowIn,
+                left: isSideBarOpen ? 0 : -288,
+                top: 0,
+                child: const SideBar(),
+              ),
+              Transform(
+                alignment: Alignment.center,
+                transform: Matrix4.identity()
+                  ..setEntry(3, 2, 0.001)
+                  ..rotateY(
+                      1 * animation.value - 30 * (animation.value) * pi / 180),
+                child: Transform.translate(
+                  offset: Offset(animation.value * 265, 0),
+                  child: Transform.scale(
+                    scale: scalAnimation.value,
+                    child: ClipRRect(
+                      borderRadius: const BorderRadius.all(
+                        Radius.circular(24),
+                      ),
+                      child: PageView(
+                        controller: _pageController,
+                        onPageChanged: (index) {
+                          setState(() {
+                            selectedIndex = index;
+                            selectedBottonNav = bottomNavItems[index];
+                          });
+                          _pageController.jumpToPage(index);
+                        },
+                        children: context.read<MainCubit>().screens,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+              AnimatedPositioned(
+                duration: const Duration(milliseconds: 200),
+                curve: Curves.fastOutSlowIn,
+                left: isSideBarOpen ? 220 : 0,
+                top: 16,
+                child: MenuBtn(
+                  press: () {
+                    isMenuOpenInput.value = !isMenuOpenInput.value;
+                    if (_animationController.value == 0) {
+                      _animationController.forward();
+                      isMenuOpenInput.value = true;
+                    } else {
+                      _animationController.reverse();
+                      isMenuOpenInput.value = false;
+                    }
+
+                    setState(() {
+                      isSideBarOpen = !isSideBarOpen;
+                    });
+                  },
+                  riveOnInit: (artboard) {
+                    final controller = StateMachineController.fromArtboard(
+                        artboard, "State Machine");
+
+                    artboard.addController(controller!);
+
+                    isMenuOpenInput =
+                        controller.findInput<bool>("isOpen") as SMIBool;
+                    isMenuOpenInput.value = true;
+                  },
+                ),
+              ),
+            ],
+          ),
+          bottomNavigationBar: Transform.translate(
+            offset: Offset(0, 100 * animation.value),
+            child: SafeArea(
+              child: Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                margin: const EdgeInsets.only(right: 24, left: 24, bottom: 0),
+                decoration: BoxDecoration(
+                  // ignore: deprecated_member_use
+                  color: backgroundColor2.withOpacity(0.8),
+                  borderRadius: const BorderRadius.all(Radius.circular(24)),
+                  boxShadow: [
+                    BoxShadow(
+                      // ignore: deprecated_member_use
+                      color: backgroundColor2.withOpacity(0.3),
+                      offset: const Offset(0, 20),
+                      blurRadius: 20,
+                    ),
+                  ],
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: List.generate(
+                    bottomNavItems.length,
+                    (index) {
+                      Menu navBar = bottomNavItems[index];
+                      return BtmNavItem(
+                        navBar: navBar,
+                        press: () {
+                          //
+                          context.read<MainCubit>().selectPage(index, context);
+                          _pageController.jumpToPage(index);
+                          RiveUtils.chnageSMIBoolState(navBar.rive.status!);
+                          _onNavItemTapped(
+                            index,
+                          );
+                        },
+                        selectedNav: selectedBottonNav,
+                        riveOnInit: (artboard) {
+                          navBar.rive.status = RiveUtils.getRiveInput(artboard,
+                              stateMachineName: navBar.rive.stateMachineName);
+                        },
+                      );
+                    },
+                  ),
+                ),
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
+
+ 
+
+
+  // ...List.generate(
+                        
+  //                       bottomNavItems.length,
+  //                       (index) {
+  //                         Menu navBar = bottomNavItems[index];
+  //                         return BtmNavItem(
+  //                           navBar: navBar,
+  //                           press: () {
+  //                             RiveUtils.chnageSMIBoolState(navBar.rive.status!);
+  //                             _onNavItemTapped(
+  //                               index,
+  //                             ); // Navigate to the corresponding page
+  //                           },
+  //                           riveOnInit: (artboard) {
+  //                             navBar.rive.status = RiveUtils.getRiveInput(
+  //                                 artboard,
+  //                                 stateMachineName:
+  //                                     navBar.rive.stateMachineName);
+  //                           },
+  //                           selectedNav:
+  //                               selectedBottonNav, // Highlight the selected nav item
+  //                         );
+  //                       },
+  //                     ),
+                    
+
+
+
+
+                    // PageView(
+                    //       controller:
+                    //           _pageController, // Control page view navigation
+                    //       onPageChanged: (index) {
+                    //         setState(() {
+                    //           selectedIndex =
+                    //               index; // Update the selected index on page swipe
+                    //           selectedBottonNav = bottomNavItems[
+                    //               index]; // Update selected nav item
+                    //         });
+                    //         _pageController.jumpToPage(index);
+                    //       },
+
+                    //       children: const [
+                    //         PaidScreen(),
+                    //         BorrowedScreen(),
+                    //         SpentScreen(),
+                    //         IncamScreen(),
+                    //       ],
+                    //     ),
